@@ -19,3 +19,6 @@ dist/
 Thumbs.db
 [Dd]esktop.ini
 *.lnk
+
+# Asset files
+./data/**
