@@ -1,0 +1,21 @@
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local environment files
+.env
+
+# Windows noise
+Thumbs.db
+[Dd]esktop.ini
+*.lnk

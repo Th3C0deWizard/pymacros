@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymacros"
+version = "0.1.0"
+description = "Excel COM automation helpers and a CLI for running Python procedures on workbooks."
+requires-python = ">=3.11"
+dependencies = [
+    "pywin32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+pymacros = "pymacros_cli.app:main"
+
+[tool.setuptools.packages.find]
+include = ["pymacros", "pymacros_cli"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
