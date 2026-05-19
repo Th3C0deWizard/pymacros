@@ -15,6 +15,7 @@
 - `procedures/` contains user-created procedure files. Procedure files should define `run(ctx: ExcelContext)` and optional `NAME` / `DESCRIPTION` metadata.
 
 ## Gotchas
+- `ExcelSession.open_book(...)` accepts local workbook paths and HTTP/HTTPS workbook URLs such as SharePoint/OneDrive links; only local paths are checked with `Path.exists()`. SharePoint `?web=1` browser params are stripped before calling Excel.
 - `ExcelSession.run_on_book(..., save=False)` and `run_workbook(..., save=False)` close with `SaveChanges=False`; pass `save=True` or call `ctx.save()` when changes must persist.
 
 ## Verification

@@ -172,6 +172,37 @@ def test_cli_run_keep_open_leaves_workbook_and_excel_open(monkeypatch, tmp_path,
     assert "Excel kept open" in captured.out
 
 
+def test_cli_run_accepts_https_workbook_url(monkeypatch, tmp_path):
+    calls = []
+    procedures_dir = tmp_path / "procedures"
+    workbook_url = "https://example.sharepoint.com/Documents/report.xlsx?web=1"
+    procedures_dir.mkdir()
+    (procedures_dir / "my_report.py").write_text(
+        "NAME = 'My Report'\n"
+        "\n"
+        "def run(ctx):\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        commands.pymacros,
+        "run_workbook",
+        lambda path, procedure, **kwargs: calls.append((path, procedure, kwargs)),
+    )
+
+    result = main([
+        "run",
+        workbook_url,
+        "My Report",
+        "--procedures-dir",
+        str(procedures_dir),
+    ])
+
+    assert result == 0
+    assert calls[0][0] == workbook_url
+
+
 def test_cli_run_prompts_for_workbook_and_procedure(monkeypatch, tmp_path, capsys):
     calls = []
     procedures_dir = tmp_path / "procedures"
@@ -336,6 +367,37 @@ def test_cli_run_prompts_for_manual_workbook_path_when_none_found(monkeypatch, t
 
     assert result == 0
     assert calls[0][0] == workbook
+
+
+def test_cli_run_accepts_manual_https_workbook_url_when_none_found(monkeypatch, tmp_path):
+    calls = []
+    procedures_dir = tmp_path / "procedures"
+    workbook_url = "https://example.sharepoint.com/Documents/report.xlsx?web=1"
+    procedures_dir.mkdir()
+    (procedures_dir / "my_report.py").write_text(
+        "NAME = 'My Report'\n"
+        "\n"
+        "def run(ctx):\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    choices = iter([workbook_url, "", "1"])
+    monkeypatch.chdir(tmp_path / "procedures")
+    monkeypatch.setattr("builtins.input", lambda prompt: next(choices))
+    monkeypatch.setattr(
+        commands.pymacros,
+        "run_workbook",
+        lambda path, procedure, **kwargs: calls.append((path, procedure, kwargs)),
+    )
+
+    result = main([
+        "run",
+        "--procedures-dir",
+        str(procedures_dir),
+    ])
+
+    assert result == 0
+    assert calls[0][0] == workbook_url
 
 
 def test_cli_run_reports_missing_workbook(capsys):

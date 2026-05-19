@@ -31,6 +31,14 @@ Run a procedure on a workbook:
 make cli ARGS="run path/to/workbook.xlsx procedure_name --save"
 ```
 
+Workbook paths can be local files or Excel-openable HTTP/HTTPS links, including SharePoint/OneDrive URLs:
+
+```bash
+make cli ARGS="run \"https://example.sharepoint.com/Documents/report.xlsx?web=1\" procedure_name"
+```
+
+For SharePoint browser links, `?web=1` is removed before calling Excel because COM needs the direct workbook URL.
+
 Run interactively with searchable workbook and procedure selection:
 
 ```bash
@@ -89,6 +97,7 @@ def run(ctx: ExcelContext) -> None:
 
 
 run_workbook("report.xlsx", run, save=True)
+run_workbook("https://example.sharepoint.com/Documents/report.xlsx?web=1", run)
 ```
 
 For lower-level control, use `ExcelSession`.

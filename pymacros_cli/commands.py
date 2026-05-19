@@ -7,6 +7,7 @@ import shlex
 import subprocess
 from argparse import Namespace
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pymacros
 from pymacros_cli import paths
@@ -130,8 +131,11 @@ def procedures_edit_folder_command(args: Namespace) -> int:
     )
 
 
-def _resolve_workbook(workbook: str | None) -> Path:
+def _resolve_workbook(workbook: str | None) -> str | Path:
     if workbook:
+        if _is_web_url(workbook):
+            return workbook
+
         path = Path(workbook)
         if not path.exists():
             raise CliError(f"Workbook not found: {path}")
@@ -164,12 +168,15 @@ def _resolve_procedure(
     return procedure
 
 
-def _prompt_workbook_path() -> Path:
+def _prompt_workbook_path() -> str | Path:
     print("No Excel workbooks found in the current directory.")
     raw_path = input("Workbook path: ").strip().strip('"')
 
     if not raw_path:
         raise CliError("Workbook path is required.")
+
+    if _is_web_url(raw_path):
+        return raw_path
 
     path = Path(raw_path)
     if not path.exists():
@@ -180,6 +187,11 @@ def _prompt_workbook_path() -> Path:
 
 def default_procedures_dir() -> str:
     return str(paths.procedures_dir())
+
+
+def _is_web_url(path: str) -> bool:
+    parsed = urlparse(path)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def _format_procedure_choice(procedure: pymacros.ProcedureInfo) -> str:

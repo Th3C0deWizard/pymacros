@@ -28,8 +28,8 @@ class ConfigError(Exception):
 class CliConfig:
     procedures_dir: Path = field(default_factory=paths.procedures_dir)
     visible: bool = True
-    save: bool = False
-    close_excel: bool = True
+    save: bool = True
+    close_excel: bool = False
     read_only: bool = False
     update_links: int = 0
     log_file: Path = field(default_factory=paths.default_log_file)

@@ -195,6 +195,49 @@ def test_run_on_book_raises_workbook_not_found(tmp_path):
         session.run_on_book(tmp_path / "missing.xlsx", lambda ctx: None)
 
 
+def test_open_book_accepts_https_workbook_url_without_filesystem_check():
+    workbook = FakeWorkbook()
+    session = excel_module.ExcelSession()
+    session.app = FakeApp(workbook)
+    workbook_url = "https://example.sharepoint.com/Documents/BACKUP%20POWERAPPS%20LISTS.xlsx?web=1"
+
+    result = session.open_book(workbook_url, read_only=True, update_links=3)
+
+    assert result is workbook
+    assert session.app.Workbooks.open_calls == [
+        ("https://example.sharepoint.com/Documents/BACKUP%20POWERAPPS%20LISTS.xlsx", 3, True)
+    ]
+
+
+def test_run_on_book_accepts_https_workbook_url_without_filesystem_check():
+    workbook = FakeWorkbook()
+    session = excel_module.ExcelSession()
+    session.app = FakeApp(workbook)
+    workbook_url = "https://example.sharepoint.com/Documents/report.xlsx?web=1"
+
+    result = session.run_on_book(workbook_url, lambda ctx: "ok")
+
+    assert result == "ok"
+    assert workbook.closed is True
+    assert session.app.Workbooks.open_calls == [
+        ("https://example.sharepoint.com/Documents/report.xlsx", 0, False)
+    ]
+
+
+def test_open_book_strips_sharepoint_web_query_but_keeps_other_query_params():
+    workbook = FakeWorkbook()
+    session = excel_module.ExcelSession()
+    session.app = FakeApp(workbook)
+    workbook_url = "https://example.sharepoint.com/Documents/report.xlsx?web=1&download=1#view"
+
+    result = session.open_book(workbook_url)
+
+    assert result is workbook
+    assert session.app.Workbooks.open_calls == [
+        ("https://example.sharepoint.com/Documents/report.xlsx?download=1", 0, False)
+    ]
+
+
 def test_run_on_book_wraps_procedure_error_and_closes_workbook(tmp_path):
     workbook_path = tmp_path / "book.xlsx"
     workbook_path.write_text("fake", encoding="utf-8")

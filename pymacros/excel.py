@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, TypeVar
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import pythoncom
 import win32com.client as win32
@@ -92,19 +93,16 @@ class ExcelSession:
         if self.app is None:
             raise ExcelSessionError("Excel session is not started.")
 
-        path = Path(path).resolve()
-
-        if not path.exists():
-            raise WorkbookNotFoundError(f"Workbook not found: {path}")
+        target = _workbook_target(path)
 
         try:
             return self.app.Workbooks.Open(
-                str(path),
+                str(target),
                 UpdateLinks=update_links,
                 ReadOnly=read_only,
             )
         except Exception as exc:
-            raise WorkbookOpenError(f"Could not open workbook {path}: {exc}") from exc
+            raise WorkbookOpenError(f"Could not open workbook {target}: {exc}") from exc
 
     def new_book(self):
         if self.app is None:
@@ -136,7 +134,7 @@ class ExcelSession:
         read_only: bool = False,
         update_links: int = 0,
     ) -> T:
-        path = Path(path)
+        target = _workbook_target(path)
         workbook = self.open_book(
             path,
             read_only=read_only,
@@ -149,7 +147,7 @@ class ExcelSession:
                 result = self.run(workbook, procedure)
             except Exception as exc:
                 primary_error = ProcedureExecutionError(
-                    f"Procedure failed while running on workbook {path}: {exc}"
+                    f"Procedure failed while running on workbook {target}: {exc}"
                 )
                 raise primary_error from exc
 
@@ -158,7 +156,7 @@ class ExcelSession:
                     workbook.Save()
                 except Exception as exc:
                     primary_error = WorkbookSaveError(
-                        f"Could not save workbook {path}: {exc}"
+                        f"Could not save workbook {target}: {exc}"
                     )
                     raise primary_error from exc
 
@@ -170,7 +168,7 @@ class ExcelSession:
                     workbook.Close(SaveChanges=False)
                 except Exception as exc:
                     close_error = WorkbookCloseError(
-                        f"Could not close workbook {path}: {exc}"
+                        f"Could not close workbook {target}: {exc}"
                     )
 
                     if primary_error is None:
@@ -223,3 +221,34 @@ def run_workbook(
             read_only=read_only,
             update_links=update_links,
         )
+
+
+def _workbook_target(path: str | Path) -> str | Path:
+    if _is_web_url(path):
+        return _excel_url_target(str(path))
+
+    resolved_path = Path(path).resolve()
+
+    if not resolved_path.exists():
+        raise WorkbookNotFoundError(f"Workbook not found: {resolved_path}")
+
+    return resolved_path
+
+
+def _is_web_url(path: str | Path) -> bool:
+    if not isinstance(path, str):
+        return False
+
+    parsed = urlparse(path)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _excel_url_target(url: str) -> str:
+    parsed = urlparse(url)
+    query_params = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() != "web"
+    ]
+    query = urlencode(query_params, doseq=True)
+    return urlunparse(parsed._replace(query=query, fragment=""))
