@@ -18,8 +18,8 @@ def test_run_workbook_uses_session_to_run_and_close(monkeypatch, tmp_path):
         return "result"
 
     class FakeSession:
-        def __init__(self, config, *, close_on_exit=True):
-            calls.append(("init", config, close_on_exit))
+        def __init__(self, config, *, close_on_exit=True, manage_com=True):
+            calls.append(("init", config, close_on_exit, manage_com))
 
         def __enter__(self):
             calls.append(("enter",))
@@ -45,7 +45,7 @@ def test_run_workbook_uses_session_to_run_and_close(monkeypatch, tmp_path):
 
     assert result == "result"
     assert calls == [
-        ("init", "config", True),
+        ("init", "config", True, True),
         ("enter",),
         ("run_on_book", workbook_path, procedure, True, True, True, 3),
         ("exit", None),
@@ -61,8 +61,8 @@ def test_run_workbook_can_keep_workbook_and_excel_open(monkeypatch, tmp_path):
         return "result"
 
     class FakeSession:
-        def __init__(self, config, *, close_on_exit=True):
-            calls.append(("init", config, close_on_exit))
+        def __init__(self, config, *, close_on_exit=True, manage_com=True):
+            calls.append(("init", config, close_on_exit, manage_com))
 
         def __enter__(self):
             calls.append(("enter",))
@@ -90,9 +90,46 @@ def test_run_workbook_can_keep_workbook_and_excel_open(monkeypatch, tmp_path):
 
     assert result == "result"
     assert calls == [
-        ("init", "config", False),
+        ("init", "config", False, True),
         ("enter",),
         ("run_on_book", workbook_path, procedure, True, False, True, 3),
+        ("exit", None),
+    ]
+
+
+def test_run_workbook_can_skip_com_management(monkeypatch, tmp_path):
+    calls = []
+    workbook_path = tmp_path / "book.xlsx"
+    workbook_path.write_text("fake", encoding="utf-8")
+
+    class FakeSession:
+        def __init__(self, config, *, close_on_exit=True, manage_com=True):
+            calls.append(("init", config, close_on_exit, manage_com))
+
+        def __enter__(self):
+            calls.append(("enter",))
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            calls.append(("exit", exc_type))
+
+        def run_on_book(self, path, proc, *, save, close, read_only, update_links):
+            calls.append(("run_on_book", path, save, close, read_only, update_links))
+            return proc(None)
+
+    monkeypatch.setattr(excel_module, "ExcelSession", FakeSession)
+
+    result = excel_module.run_workbook(
+        workbook_path,
+        lambda ctx: "result",
+        manage_com=False,
+    )
+
+    assert result == "result"
+    assert calls == [
+        ("init", None, True, False),
+        ("enter",),
+        ("run_on_book", workbook_path, False, True, False, 0),
         ("exit", None),
     ]
 

@@ -32,14 +32,22 @@ class ExcelConfig:
 
 
 class ExcelSession:
-    def __init__(self, config: ExcelConfig | None = None, *, close_on_exit: bool = True):
+    def __init__(
+        self,
+        config: ExcelConfig | None = None,
+        *,
+        close_on_exit: bool = True,
+        manage_com: bool = True,
+    ):
         self.config = config or ExcelConfig()
         self.close_on_exit = close_on_exit
+        self.manage_com = manage_com
         self.app = None
         self._previous_state: dict[str, Any] = {}
 
     def __enter__(self):
-        pythoncom.CoInitialize()
+        if self.manage_com:
+            pythoncom.CoInitialize()
 
         # DispatchEx crea una nueva instancia de Excel,
         # en vez de conectarse a una ya abierta.
@@ -57,7 +65,8 @@ class ExcelSession:
             else:
                 self.detach()
         finally:
-            pythoncom.CoUninitialize()
+            if self.manage_com:
+                pythoncom.CoUninitialize()
 
     def _capture_previous_state(self):
         self._previous_state = {
@@ -209,10 +218,11 @@ def run_workbook(
     save: bool = False,
     close_workbook: bool = True,
     close_excel: bool = True,
+    manage_com: bool = True,
     read_only: bool = False,
     update_links: int = 0,
 ) -> T:
-    with ExcelSession(config, close_on_exit=close_excel) as excel:
+    with ExcelSession(config, close_on_exit=close_excel, manage_com=manage_com) as excel:
         return excel.run_on_book(
             path,
             procedure,
