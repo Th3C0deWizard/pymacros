@@ -29,7 +29,7 @@ class CliConfig:
     procedures_dir: Path = field(default_factory=paths.procedures_dir)
     visible: bool = True
     save: bool = True
-    close_excel: bool = False
+    close_excel: bool = True
     read_only: bool = False
     update_links: int = 0
     log_file: Path = field(default_factory=paths.default_log_file)
@@ -53,7 +53,7 @@ def load_config(path: str | Path | None = None) -> CliConfig:
     return CliConfig(
         procedures_dir=_path_value(raw_config, "procedures_dir", paths.procedures_dir()),
         visible=_bool_value(raw_config, "visible", True),
-        save=_bool_value(raw_config, "save", False),
+        save=_bool_value(raw_config, "save", True),
         close_excel=_bool_value(raw_config, "close_excel", True),
         read_only=_bool_value(raw_config, "read_only", False),
         update_links=_int_value(raw_config, "update_links", 0),

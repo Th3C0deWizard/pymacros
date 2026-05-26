@@ -117,7 +117,7 @@ Example:
   "procedures_dir": "C:/Users/you/AppData/Roaming/pymacros/procedures",
   "editor": "code",
   "visible": true,
-  "save": false,
+  "save": true,
   "close_excel": true,
   "read_only": false,
   "update_links": 0

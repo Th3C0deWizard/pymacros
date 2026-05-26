@@ -1,4 +1,5 @@
 import pytest
+import threading
 
 from pymacros import (
     ProcedureExecutionError,
@@ -129,9 +130,63 @@ def test_run_workbook_can_skip_com_management(monkeypatch, tmp_path):
     assert calls == [
         ("init", None, True, False),
         ("enter",),
-        ("run_on_book", workbook_path, False, True, False, 0),
+        ("run_on_book", workbook_path, True, True, False, 0),
         ("exit", None),
     ]
+
+
+def test_run_workbook_runs_session_on_isolated_worker_thread(monkeypatch, tmp_path):
+    thread_names = []
+    caller_thread = threading.current_thread().name
+    workbook_path = tmp_path / "book.xlsx"
+    workbook_path.write_text("fake", encoding="utf-8")
+
+    class FakeSession:
+        def __init__(self, config, *, close_on_exit=True, manage_com=True):
+            pass
+
+        def __enter__(self):
+            thread_names.append(threading.current_thread().name)
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
+        def run_on_book(self, path, proc, *, save, close, read_only, update_links):
+            return proc(None)
+
+    monkeypatch.setattr(excel_module, "ExcelSession", FakeSession)
+
+    result = excel_module.run_workbook(workbook_path, lambda ctx: "ok")
+
+    assert result == "ok"
+    assert thread_names == ["pymacros-excel-worker"]
+    assert thread_names[0] != caller_thread
+
+
+def test_run_workbook_reraises_worker_exception_without_thread_traceback(monkeypatch, tmp_path):
+    workbook_path = tmp_path / "book.xlsx"
+    workbook_path.write_text("fake", encoding="utf-8")
+
+    class FakeSession:
+        def __init__(self, config, *, close_on_exit=True, manage_com=True):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
+        def run_on_book(self, path, proc, *, save, close, read_only, update_links):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(excel_module, "ExcelSession", FakeSession)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        excel_module.run_workbook(workbook_path, lambda ctx: None)
+
+    assert str(exc_info.value) == "boom"
 
 
 class FakeWorkbooks:
@@ -196,6 +251,47 @@ def test_excel_session_detaches_instead_of_quitting_when_close_on_exit_false(mon
 
     assert app.quit_called is False
     assert session.app is None
+
+
+def test_excel_session_uninitializes_com_when_dispatch_fails(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(excel_module.pythoncom, "CoInitialize", lambda: calls.append("init"))
+    monkeypatch.setattr(excel_module.pythoncom, "CoUninitialize", lambda: calls.append("uninit"))
+
+    def fail_dispatch(name):
+        calls.append(("dispatch", name))
+        raise RuntimeError("dispatch failed")
+
+    monkeypatch.setattr(excel_module.win32, "DispatchEx", fail_dispatch)
+
+    with pytest.raises(RuntimeError, match="dispatch failed"):
+        with excel_module.ExcelSession():
+            pass
+
+    assert calls == ["init", ("dispatch", "Excel.Application"), "uninit"]
+
+
+def test_excel_session_quits_and_uninitializes_com_when_setup_fails(monkeypatch):
+    calls = []
+    app = FakeQuitApp()
+
+    monkeypatch.setattr(excel_module.pythoncom, "CoInitialize", lambda: calls.append("init"))
+    monkeypatch.setattr(excel_module.pythoncom, "CoUninitialize", lambda: calls.append("uninit"))
+    monkeypatch.setattr(excel_module.win32, "DispatchEx", lambda name: app)
+
+    def fail_capture(self):
+        calls.append("capture")
+        raise RuntimeError("capture failed")
+
+    monkeypatch.setattr(excel_module.ExcelSession, "_capture_previous_state", fail_capture)
+
+    with pytest.raises(RuntimeError, match="capture failed"):
+        with excel_module.ExcelSession():
+            pass
+
+    assert calls == ["init", "capture", "uninit"]
+    assert app.quit_called is True
 
 
 def test_excel_session_keep_open_restores_interactive_flags_without_hiding(monkeypatch):

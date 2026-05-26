@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import gc
+import queue
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -46,17 +49,28 @@ class ExcelSession:
         self._previous_state: dict[str, Any] = {}
 
     def __enter__(self):
-        if self.manage_com:
-            pythoncom.CoInitialize()
+        com_initialized = False
 
-        # DispatchEx crea una nueva instancia de Excel,
-        # en vez de conectarse a una ya abierta.
-        self.app = win32.DispatchEx("Excel.Application")
+        try:
+            if self.manage_com:
+                pythoncom.CoInitialize()
+                com_initialized = True
 
-        self._capture_previous_state()
-        self._apply_config()
+            # DispatchEx crea una nueva instancia de Excel,
+            # en vez de conectarse a una ya abierta.
+            self.app = win32.DispatchEx("Excel.Application")
 
-        return self
+            self._capture_previous_state()
+            self._apply_config()
+
+            return self
+        except Exception:
+            try:
+                self.quit()
+            finally:
+                if self.manage_com and com_initialized:
+                    pythoncom.CoUninitialize()
+            raise
 
     def __exit__(self, exc_type, exc_value, traceback):
         try:
@@ -138,7 +152,7 @@ class ExcelSession:
         path: str | Path,
         procedure: Procedure[T],
         *,
-        save: bool = False,
+        save: bool = True,
         close: bool = True,
         read_only: bool = False,
         update_links: int = 0,
@@ -184,6 +198,9 @@ class ExcelSession:
                         raise close_error from exc
 
                     primary_error.add_note(f"Additionally failed to close workbook: {exc}")
+                finally:
+                    workbook = None
+                    gc.collect()
 
     def quit(self):
         if self.app is None:
@@ -198,6 +215,7 @@ class ExcelSession:
             self.app.Quit()
         finally:
             self.app = None
+            gc.collect()
 
     def detach(self):
         if self.app is None:
@@ -215,7 +233,33 @@ def run_workbook(
     procedure: Procedure[T],
     *,
     config: ExcelConfig | None = None,
-    save: bool = False,
+    save: bool = True,
+    close_workbook: bool = True,
+    close_excel: bool = True,
+    manage_com: bool = True,
+    read_only: bool = False,
+    update_links: int = 0,
+) -> T:
+    return _run_in_isolated_excel_thread(
+        _run_workbook_in_current_thread,
+        path,
+        procedure,
+        config=config,
+        save=save,
+        close_workbook=close_workbook,
+        close_excel=close_excel,
+        manage_com=manage_com,
+        read_only=read_only,
+        update_links=update_links,
+    )
+
+
+def _run_workbook_in_current_thread(
+    path: str | Path,
+    procedure: Procedure[T],
+    *,
+    config: ExcelConfig | None = None,
+    save: bool = True,
     close_workbook: bool = True,
     close_excel: bool = True,
     manage_com: bool = True,
@@ -231,6 +275,41 @@ def run_workbook(
             read_only=read_only,
             update_links=update_links,
         )
+
+
+def _run_in_isolated_excel_thread(
+    target: Callable[..., T],
+    *args: Any,
+    **kwargs: Any,
+) -> T:
+    results: queue.SimpleQueue[tuple[bool, T | BaseException]] = queue.SimpleQueue()
+
+    def worker() -> None:
+        try:
+            results.put((True, target(*args, **kwargs)))
+        except BaseException as exc:
+            _detach_exception_tracebacks(exc)
+            results.put((False, exc))
+
+    thread = threading.Thread(target=worker, name="pymacros-excel-worker")
+    thread.start()
+    thread.join()
+
+    succeeded, payload = results.get()
+    if succeeded:
+        return payload  # type: ignore[return-value]
+
+    raise payload from None
+
+
+def _detach_exception_tracebacks(exc: BaseException) -> None:
+    seen: set[int] = set()
+    current: BaseException | None = exc
+
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        current.__traceback__ = None
+        current = current.__cause__ or current.__context__
 
 
 def _workbook_target(path: str | Path) -> str | Path:
