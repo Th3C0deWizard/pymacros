@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymacros"
-version = "0.1.0"
+version = "0.1.2"
 description = "Excel COM automation helpers and a CLI for running Python procedures on workbooks."
 requires-python = ">=3.11"
 dependencies = [

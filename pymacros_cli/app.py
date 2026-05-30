@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="pymacros CLI 0.1.0",
+        version="pymacros CLI 0.1.2",
     )
     parser.add_argument(
         "--debug",
